@@ -38,6 +38,7 @@ import { CorrelationIdMiddleware } from './shared/middlewares/correlation-id.mid
 import { SentryMiddleware } from './shared/middlewares/sentry.middleware';
 import * as Tracing from '@sentry/tracing';
 import { OrganizationsModule } from './organizations/organizations.module';
+import { v1_miningpool_module } from './v1-miningpool/v1_miningpool_module';
 
 @Module({
     imports: [
@@ -89,7 +90,8 @@ import { OrganizationsModule } from './organizations/organizations.module';
             },
         }),
         AccountsModule,
-        OrganizationsModule
+        OrganizationsModule,
+        v1_miningpool_module,
     ],
     controllers: [AppController],
     providers: [
