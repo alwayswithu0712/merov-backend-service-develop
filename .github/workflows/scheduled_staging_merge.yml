@@ -1,0 +1,176 @@
+name: Update staging weekly
+
+on:
+  # Allows for manual triggering through api
+  workflow_dispatch:
+
+#   schedule:
+      # At 00:00 on Saturday.
+#       - cron:  '0 0 * * 6'
+
+env:
+  ENVIRONMENT: staging
+  AWS_REGION: us-east-2
+  ECR_REPOSITORY: merov-backend-staging-ecr-repository
+  ECS_SERVICE: merov-backend-staging--ecs-service
+  ECS_CLUSTER: merov-backend-staging--ecs-cluster
+  ECS_TASK_DEFINITION: .aws/task-definition.staging.json
+  CONTAINER_NAME: merov-backend-staging--container
+
+defaults:
+    run:
+      shell: bash
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    outputs:
+      staging_tag: ${{ steps.tag-merge.outputs.tag }}
+      staging_sha: ${{ steps.tag-merge.outputs.sha }}
+      status: ${{ steps.tag-merge.outputs.status }}
+    steps:
+
+      - name: Git checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: '0'
+
+      - name: git
+        id: git-setup
+        run: |
+          git --version
+          git config user.name "GitHub Actions Bot"
+          git config user.email "<>"
+          git status
+          LAST_STAGING_TS=$(git log -n 1 --pretty=format:"%h%x09%ct%x09%s" origin/staging | awk '{print $2}')
+          COMMITS="$(git log --pretty=format:'%h%x09%cI%x09%s' --since=format:ct:$(( $LAST_STAGING_TS + 1 )) origin/develop)"
+          echo "::set-output name=commits::$COMMITS"
+          echo "COMMITS<<EOF" >> $GITHUB_ENV
+          echo "$COMMITS" >> $GITHUB_ENV
+          echo 'EOF' >> $GITHUB_ENV
+
+      - name: prepare merge
+        id: prepare-merge
+        if: ${{ steps.git-setup.outputs.commits != '' }}
+        run: |
+          git checkout staging
+          git branch merge/staging
+          git checkout develop
+          git merge -m "Merge branch 'merge/staging' into develop" -s ours merge/staging
+          git checkout merge/staging
+          git merge --commit develop
+
+      - name: git merge
+        id: update-staging
+        if: ${{ steps.prepare-merge.outcome == 'success' }}
+        run: |
+          COMMITS_BULLET="$(echo "$COMMITS" | sed 's/^\(.\)/* \1/')"
+          git checkout staging
+          git merge --squash merge/staging
+          git commit -m "Automated release candidate" -m "$COMMITS_BULLET"
+          git log -n 1
+          git push
+
+      - name: tag merge
+        id: tag-merge
+        if: ${{ steps.update-staging.outcome == 'success' }}
+        run: |
+          LAST_VERSION=$(git tag --list | awk '/rc-'$(date +%Y-%m-%d)'/{print}' | awk -F"-" '{print $5}' | sed 's/v//' | sort | tail -1)
+          NEW_VERISON=$(( ${LAST_VERSION:-0} + 1 ))
+          TAG=rc-$(date +%Y-%m-%d)-v${NEW_VERISON}
+          git checkout staging
+          git tag -m "Created by workflow at $(date)" $TAG
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "sha=$(git rev-parse --short staging)" >> $GITHUB_OUTPUT
+          echo "status=merged" >> $GITHUB_OUTPUT
+          git tag --list
+          git push --tags
+
+      - name: summary
+        id: summary
+        if: ${{ steps.tag-merge.outcome == 'success' }}
+        env:
+          TAG: ${{ steps.tag-merge.outputs.tag }}
+          SHA: ${{ steps.tag-merge.outputs.sha }}
+        run: |
+          COMMIT_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit"
+          echo "#### Release candidate $TAG (commit $SHA)" >> $GITHUB_STEP_SUMMARY
+          echo "----" >> $GITHUB_STEP_SUMMARY
+          echo "$COMMITS" | sed "s/^\([[:alnum:]]\{7\}\)/* [\`\1\`](${COMMIT_URL//\//\\/}\/\1)/" >> $GITHUB_STEP_SUMMARY
+
+  deploy:
+    name: Deploy
+    needs: merge
+    if: ${{ needs.merge.outputs.status == 'merged' }}
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      packages: write
+      contents: read
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          ref: staging
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1.5.1
+
+      - name: Store ENV from AWS SecretManager
+        uses: say8425/aws-secrets-manager-actions@v2
+        with:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ env.AWS_REGION }}
+          SECRET_NAME: merov-backend-${{ env.ENVIRONMENT }}--scts
+          OUTPUT_PATH: .env
+
+      - name: Build, tag, and push image to Amazon ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ needs.merge.outputs.staging_sha }}
+          VERSION_TAG: ${{ needs.merge.outputs.staging_tag }}
+        run: |
+          # Build a docker container and
+          # push it to ECR so that it can
+          # be deployed to ECS.
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG --label "version=$VERSION_TAG" --label "git_sha1=$IMAGE_TAG" .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Fill in the new image ID in the Amazon ECS task definition
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: ${{ env.ECS_TASK_DEFINITION }}
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: ${{ steps.build-image.outputs.image }}
+
+      - name: Deploy Amazon ECS task definition
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1.4.10
+        with:
+          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+
+      - uses: actions/checkout@v3
+      - name: Create Sentry release
+        uses: getsentry/action-release@v1.2.0
+        env:
+          SENTRY_LOG_LEVEL: debug
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+        with:
+          environment: ${{ env.ENVIRONMENT }}

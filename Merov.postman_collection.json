@@ -1,0 +1,241 @@
+{
+	"info": {
+		"_postman_id": "0368fac8-65db-4933-850f-0842df8d4087",
+		"name": "Merov",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "2389135"
+	},
+	"item": [
+		{
+			"name": "notifications",
+			"item": [
+				{
+					"name": "Get all notifications",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{DEV_API_URL}}/notifications",
+							"host": [
+								"{{DEV_API_URL}}"
+							],
+							"path": [
+								"notifications"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get unread count",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{LOCAL_API_URL}}/notifications/unread/count",
+							"host": [
+								"{{LOCAL_API_URL}}"
+							],
+							"path": [
+								"notifications",
+								"unread",
+								"count"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get unread",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{LOCAL_API_URL}}/notifications/unread",
+							"host": [
+								"{{LOCAL_API_URL}}"
+							],
+							"path": [
+								"notifications",
+								"unread"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Me",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{ACCESS_TOKEN}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{DEV_API_URL}}/users/me",
+					"host": [
+						"{{DEV_API_URL}}"
+					],
+					"path": [
+						"users",
+						"me"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Access Token",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"grant_type\": \"password\",\n    \"username\": \"{{ADMIN_USER_NAME}}\",\n    \"password\": \"{{ADMIN_USER_PASSWORD}}\",\n    \"audience\": \"http://localhost:3001/api\",\n    \"scope\": \"openid profile email\",\n    \"client_id\": \"3HBaRRI1TRZ4Atjl4wTjIKDhRGVl1Pte\",\n    \"client_secret\": \"H7WI_zbE0FaGJtZztWPzPbhDBHxgtFj8C-rdlj-lzPWJuYI9Pjne9wu-Lu-7uoeR\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{AUTH_URL}}token",
+					"host": [
+						"{{AUTH_URL}}token"
+					]
+				}
+			},
+			"response": []
+		}
+	],
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{ACCESS_TOKEN}}",
+				"type": "string"
+			}
+		]
+	},
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"",
+					"/*",
+					"{",
+					"    \"grant_type\": \"password\",",
+					"    \"username\": \"{{ADMIN_USER_NAME}}\",",
+					"    \"password\": \"{{ADMIN_USER_PASSWORD}}\",",
+					"    \"audience\": \"http://localhost:3001/api\",",
+					"    \"scope\": \"openid profile email\",",
+					"    \"client_id\": \"3HBaRRI1TRZ4Atjl4wTjIKDhRGVl1Pte\",",
+					"    \"client_secret\": \"H7WI_zbE0FaGJtZztWPzPbhDBHxgtFj8C-rdlj-lzPWJuYI9Pjne9wu-Lu-7uoeR\"",
+					"}",
+					"*/",
+					"",
+					"const tokenUrl = pm.collectionVariables.get(\"AUTH_URL\") + \"token\";",
+					"const body = {",
+					"                'username': pm.collectionVariables.get(\"ADMIN_USER_NAME\"),",
+					"                'password': pm.collectionVariables.get(\"ADMIN_USER_PASSWORD\"),",
+					"                'scope': 'openid profile email',",
+					"                'client_id': '3HBaRRI1TRZ4Atjl4wTjIKDhRGVl1Pte',",
+					"                'client_secret': 'H7WI_zbE0FaGJtZztWPzPbhDBHxgtFj8C-rdlj-lzPWJuYI9Pjne9wu-Lu-7uoeR',",
+					"                'grant_type': 'password',",
+					"                'audience': 'http://localhost:3001/api'",
+					"            }",
+					"const tokenRequest = {",
+					"    url: tokenUrl,",
+					"    method: 'POST',",
+					"    header: {",
+					"        'Content-Type': 'application/json',",
+					"    },",
+					"    'body': {",
+					"            mode: 'raw',",
+					"            raw: JSON.stringify(body)",
+					"    }",
+					"}",
+					"",
+					"pm.sendRequest(tokenRequest, function (err, response) {",
+					"    const r = response.json();",
+					"    pm.collectionVariables.set(\"ACCESS_TOKEN\", r.access_token)",
+					"});",
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "AUTH_URL",
+			"value": "https://merov-dev.us.auth0.com/oauth/",
+			"type": "string"
+		},
+		{
+			"key": "LOCAL_API_URL",
+			"value": "http://localhost:3001/api",
+			"type": "string"
+		},
+		{
+			"key": "DEV_API_URL",
+			"value": "https://develop.backend.merov.io/api",
+			"type": "string"
+		},
+		{
+			"key": "TEST_API_URL",
+			"value": "https://test.backend.merov.io/api",
+			"type": "string"
+		},
+		{
+			"key": "STAGING_API_URL",
+			"value": "https://staging.backend.merov.io/api",
+			"type": "string"
+		},
+		{
+			"key": "ADMIN_USER_NAME",
+			"value": "flestrade+003@spacedev.uy",
+			"type": "string"
+		},
+		{
+			"key": "ADMIN_USER_PASSWORD",
+			"value": "aceptar123!O",
+			"type": "string"
+		},
+		{
+			"key": "USER_NAME",
+			"value": "antomescia",
+			"type": "string"
+		},
+		{
+			"key": "USER_PASSWORD",
+			"value": "aceptar123!O",
+			"type": "string"
+		},
+		{
+			"key": "ACCESS_TOKEN",
+			"value": "",
+			"type": "string"
+		}
+	]
+}

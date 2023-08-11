@@ -1,0 +1,19 @@
+# Dependency directories
+node_modules/
+build/
+build/contracts
+dist/
+scripts/
+*.log.gz
+*.txt
+
+*.DS_Store*
+
+# dotenv environment variables file
+.env
+.env.test
+.env.prod
+
+package-lock.json
+
+

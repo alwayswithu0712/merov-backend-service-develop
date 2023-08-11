@@ -1,0 +1,496 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["fullTextSearch"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Account {
+  id                  String   @id @default(uuid())
+  name                String   @unique
+  avatarUrl           String?
+  email               String
+  reviewCount         Int      @default(0)
+  rating              Float    @default(0)
+  sendBirdAccessToken String?
+  referralId          String?
+  count               Int      @default(autoincrement())
+  createdAt           DateTime @default(now())
+
+  wallets      Wallet[]
+  addresses    Address[]
+  users        User[]        @relation("member")
+  invitations  Invitation[]  @relation("invitingAcc")
+  buyChats     Chat[]        @relation("chatBuyer")
+  sellChats    Chat[]        @relation("chatSeller")
+  offer        Offer[]
+  buyOrders    Order[]       @relation("buyer")
+  sellOrders   Order[]       @relation("seller")
+  myReviews    OrderReview[] @relation("myReviews")
+  theirReviews OrderReview[] @relation("theirReviews")
+  referredBy   Account?      @relation("AccountReferral", fields: [referralId], references: [id])
+  referredTo   Account[]     @relation("AccountReferral")
+  products     Product[]
+
+  organization Organization? @relation("orgAccount")
+}
+
+model User {
+  id                   String                     @id @default(uuid())
+  authId               String                     @unique
+  count                Int                        @default(autoincrement())
+  firstName            String?
+  lastName             String?
+  email                String                     @unique
+  phone                String?                    @unique
+  blocked              Boolean                    @default(false)
+  dateOfBirth          DateTime?
+  isPhoneVerified      Boolean                    @default(false)
+  idVerificationStatus IdentityVerificationStatus @default(Unverified)
+  accountId            String
+  address              String?
+  updatedAt            DateTime                   @updatedAt
+  createdAt            DateTime                   @default(now())
+
+  devices               Device[]               @relation("deviceOwner")
+  phoneVerifications    PhoneVerification[]
+  identityVerifications IdentityVerification[]
+  invitations           Invitation[]           @relation("invitationSender")
+  account               Account                @relation("member", fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+}
+
+model Organization {
+  id                             String                         @id @default(uuid())
+  count                          Int                            @default(autoincrement())
+  organizationVerificationStatus OrganizationVerificationStatus @default(Unverified)
+  name                           String
+  taxId                          String
+  address                        String
+  verification                   OrganizationVerification?
+  website                        String
+  accountId                      String                         @unique
+  createdAt                      DateTime                       @default(now())
+  updatedAt                      DateTime                       @updatedAt
+
+  account Account @relation("orgAccount", fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+}
+
+model Invitation {
+  id          String           @id @default(uuid())
+  email       String
+  accountId   String
+  status      InvitationStatus @default(Pending)
+  dueDate     DateTime
+  senderId    String
+  permissions Json             @default("[]")
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  account Account @relation("invitingAcc", fields: [accountId], references: [id])
+  sender  User    @relation("invitationSender", fields: [senderId], references: [id])
+}
+
+model Device {
+  id            String @id @default(uuid())
+  firebaseToken String @unique
+  userId        String
+  user          User   @relation("deviceOwner", fields: [userId], references: [id])
+}
+
+model PhoneVerification {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  userId    String
+  phone     String
+  user      User     @relation(fields: [userId], references: [id])
+  provider  String
+  verified  Boolean
+}
+
+model IdentityVerification {
+  id        String   @id
+  createdAt DateTime @default(now())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  status    String
+  provider  String
+  response  String
+
+  firstName     String?
+  lastName      String?
+  dateOfBirth   DateTime?
+  address       String    @default("")
+  cipConfidence String    @default("")
+}
+
+model OrganizationVerification {
+  id             String                         @id
+  createdAt      DateTime                       @default(now())
+  organizationId String                         @unique
+  organization   Organization                   @relation(fields: [organizationId], references: [id])
+  status         OrganizationVerificationStatus @default(Unverified)
+  provider       String
+  response       String
+}
+
+model Address {
+  id        String   @id @default(uuid())
+  name      String
+  street    String
+  city      String
+  state     String
+  country   String
+  postcode  String
+  phone     String
+  accountId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  account Account   @relation(fields: [accountId], references: [id])
+  product Product[] @relation()
+}
+
+model Wallet {
+  id        String   @id @default(uuid())
+  name      String
+  address   String
+  chain     String
+  accountId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  account Account @relation(fields: [accountId], references: [id])
+}
+
+model Order {
+  id                        String        @id
+  createdAt                 DateTime      @default(now())
+  updatedAt                 DateTime      @updatedAt
+  escrowAddress             String?
+  escrowId                  Int?          @unique
+  productId                 String
+  price                     Float
+  quantity                  Int
+  total                     Float
+  trackingNumber            String?
+  shippingCost              Float         @default(0)
+  maxShippingDurationInDays Int
+  maxTimeToDisputeInDays    Int
+  minTestingTime            Int?
+  maxTestingTime            Int?
+  acceptedAt                DateTime?
+  paidAt                    DateTime?
+  shippedAt                 DateTime?
+  refundedAt                DateTime?
+  disputedAt                DateTime?
+  closedAt                  DateTime?
+  deliveredAt               DateTime?
+  payinTxHash               String?
+  payoutTxHash              String?
+  buyerId                   String
+  buyerAddress              String?
+  failedAt                  DateTime?
+  sellerId                  String
+  sellerAddress             String
+  status                    OrderStatus   @default(Created)
+  priceUSD                  Float?
+  shippingCostUSD           Float?        @default(0)
+  totalUSD                  Float?
+  sellerNotes               String?
+  shippingToAddressName     String
+  shippingToState           String
+  shippingToStreet          String
+  shippingToCity            String
+  shippingToCountry         String
+  shippingToPostcode        String
+  disputeReason             String?
+  buyerPhone                String
+  sellerPhone               String
+  shippingFromAddressName   String        @default("")
+  shippingFromStreet        String        @default("")
+  shippingFromCity          String        @default("")
+  shippingFromState         String        @default("")
+  shippingFromCountry       String        @default("")
+  shippingFromPostcode      String        @default("")
+  chain                     String
+  currency                  String
+  buyer                     Account       @relation("buyer", fields: [buyerId], references: [id])
+  product                   Product       @relation(fields: [productId], references: [id])
+  seller                    Account       @relation("seller", fields: [sellerId], references: [id])
+  reviews                   OrderReview[]
+  offer                     Offer?        @relation(fields: [offerId], references: [id])
+  offerId                   String?
+  chatId                    String?       @unique
+  chat                      Chat?         @relation(fields: [chatId], references: [id])
+  disputeId                 Int?
+  dispute                   Dispute?
+  completedAt               DateTime?
+}
+
+model Offer {
+  id             String           @id
+  createdAt      DateTime         @default(now())
+  price          Float
+  shippingCost   Float            @default(0)
+  expirationDate DateTime?
+  minTestingTime Int?
+  maxTestingTime Int?
+  visibility     VisibilityStatus
+  sellerId       String
+  productId      String
+  quantity       Int              @default(1)
+  sharedWith     String?
+  status         OfferStatus
+  sellerAddress  String
+  currency       String
+  chain          String
+  url            String?
+  product        Product          @relation(fields: [productId], references: [id])
+  seller         Account          @relation(fields: [sellerId], references: [id])
+  chats          Chat[]
+  orders         Order[]
+}
+
+model OrderReview {
+  id                String   @id @default(uuid())
+  createdAt         DateTime @default(now())
+  rating            Int
+  review            String
+  revieweeId        String
+  reviewerId        String
+  reviewerAvatarUrl String?
+  orderId           String
+  order             Order    @relation(fields: [orderId], references: [id])
+  reviewee          Account  @relation("myReviews", fields: [revieweeId], references: [id])
+  reviewer          Account  @relation("theirReviews", fields: [reviewerId], references: [id])
+
+  @@unique([orderId, reviewerId, revieweeId])
+}
+
+model OrderUpdate {
+  id        String      @id @default(uuid())
+  createdAt DateTime    @default(now())
+  orderId   String
+  status    OrderStatus
+}
+
+model Product {
+  id            String   @id
+  createdAt     DateTime @default(now())
+  title         String
+  description   String
+  price         Float
+  priceInUsd    Float?
+  images        String[]
+  condition     String
+  stock         Int      @default(0)
+  sellerId      String
+  sellerAddress String
+
+  brand String?
+  model String?
+
+  currency String
+  chain    String
+  seller   Account @relation(fields: [sellerId], references: [id])
+  orders   Order[]
+  offers   Offer[]
+  chats    Chat[]
+
+  categoryId    String
+  category      Category    @relation(fields: [categoryId], references: [id])
+  subcategoryId String
+  subcategory   Subcategory @relation(fields: [subcategoryId], references: [id])
+
+  shippingCost Float @default(0)
+
+  deliveryAddressId String
+  deliveryAddress   Address @relation(fields: [deliveryAddressId], references: [id])
+
+  weight         Float?
+  weightUnit     String?
+  length         Float?
+  width          Float?
+  height         Float?
+  dimensionsUnit String?
+
+  maxTestingTime Int?
+  minTestingTime Int?
+
+  requiresShipping Boolean @default(true)
+  approved         Boolean @default(false)
+  published        Boolean @default(true)
+  featured         Boolean @default(false)
+  deleted          Boolean @default(false)
+}
+
+model Category {
+  id            String        @id @default(uuid())
+  wallapopId    Int?
+  createdAt     DateTime      @default(now())
+  name          String
+  fields        Json?
+  subcategories Subcategory[]
+  products      Product[]
+}
+
+model Subcategory {
+  id         String    @id @default(uuid())
+  wallapopId Int?
+  createdAt  DateTime  @default(now())
+  fields     Json?
+  name       String
+  category   Category  @relation(fields: [categoryId], references: [id])
+  categoryId String
+  products   Product[]
+}
+
+model Brand {
+  id            String  @id @default(uuid())
+  categoryId    String
+  subcategoryId String
+  name          String
+  approved      Boolean @default(false)
+
+  @@unique([categoryId, subcategoryId, name])
+}
+
+model Model {
+  id            String  @id @default(uuid())
+  categoryId    String
+  subcategoryId String
+  brand         String
+  name          String
+  approved      Boolean @default(false)
+
+  @@unique([categoryId, subcategoryId, brand, name])
+}
+
+model FrontendError {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  message   String?
+  code      String?
+  stack     String?
+  userId    String?
+  username  String?
+}
+
+model Chat {
+  id        String   @id
+  createdAt DateTime @default(now())
+  url       String
+  buyerId   String
+  sellerId  String
+
+  buyer     Account @relation("chatBuyer", fields: [buyerId], references: [id])
+  product   Product @relation(fields: [productId], references: [id])
+  seller    Account @relation("chatSeller", fields: [sellerId], references: [id])
+  productId String
+  order     Order?
+  offerId   String? @unique
+  offer     Offer?  @relation(fields: [offerId], references: [id])
+}
+
+model Dispute {
+  id              String        @id @default(uuid())
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  orderId         String        @unique
+  order           Order         @relation(fields: [orderId], references: [id])
+  reason          String?
+  status          DisputeStatus @default(Open)
+  resolvedComment String?
+  resolvedAt      DateTime?
+  resolvedBy      String?
+}
+
+model SubscriptionEmail {
+  email      String   @unique
+  updates    Boolean  @default(true)
+  betaTester Boolean  @default(false)
+  createdAt  DateTime @default(now())
+}
+
+model ContactForm {
+  id          String   @id @default(uuid())
+  reason      String
+  name        String
+  email       String
+  description String
+  createdAt   DateTime @default(now())
+}
+
+model RequestLog {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  url       String
+  method    String
+  status    Int
+  request   String
+  response  String
+  userId    String?
+  sessionId String?
+}
+
+model BlogPost {
+  id          String   @id @default(uuid())
+  createdAt   DateTime @default(now())
+  description String
+  title       String
+  images      String[]
+}
+
+enum DisputeStatus {
+  Open
+  Resolved
+}
+
+enum OrderStatus {
+  Created
+  Accepted
+  Paid
+  Shipped
+  Delivered
+  Disputed
+  Refunded
+  Closed
+  Completed
+  EscrowPaymentFailed
+}
+
+enum VisibilityStatus {
+  Public
+  Private
+}
+
+enum OrganizationVerificationStatus {
+  Unverified
+  Pending
+  Approved
+  Rejected
+}
+
+enum IdentityVerificationStatus {
+  Unverified
+  Lite
+  Full
+  Rejected
+  Reviewing
+  Blocked
+}
+
+enum OfferStatus {
+  Active
+  Expired
+  Closed
+}
+
+enum InvitationStatus {
+  Confirmed
+  Pending
+  Expired
+}
